@@ -1,8 +1,11 @@
 # encoding: utf-8
 import torch
 import math
+
+from timm.models.pit import Transformer
 from torch.nn import Module
 from . import resnet_care as resnet
+from .LSTMVITCNN import LTformer
 from .trans import Attention
 from .trans import Cross_Attention
 from .trans import TransStack
@@ -17,12 +20,23 @@ class CARE(Module):
         self.param_momentum = param_momentum
         self.current_train_iter = 0
 
-        self.student_encoder = resnet.resnet50(
-            low_dim=256, width=1, hidden_dim=4096, MLP="care", CLS=False, bn="customized", predictor=True
-        )
-        self.teacher_encoder = resnet.resnet50(
-            low_dim=256, width=1, hidden_dim=4096, MLP="care", CLS=False, bn="customized", predictor=False
-        )
+        self.student_encoder = LTformer(image_size=32,  # 图像大小
+                 patch_size=8,
+                 num_classes=2,
+                 embed_dim=256,
+                 seq_len=0,
+                 hidden_dim=2048,
+                 num_heads=256,
+                 num_layers=4,
+                 dropout=0.1,
+                 classification=False)
+        self.teacher_encoder = Transformer(d_model=256,
+                                            nhead=8,
+                                            num_encoder_layers=6,
+                                            num_decoder_layers=6,
+                                            dim_feedforward=2048,
+                                            dropout=0.1
+                                                    )
 
         self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
         self.lambda_fea = 100
@@ -74,7 +88,7 @@ class CARE(Module):
         loss = con_loss + con2_loss + self.lambda_fea * fea_loss
         self.current_train_iter += 1
         if self.training:
-            #return loss, con_loss, con2_loss, self.lambda_fea * fea_loss
+
             return loss, con_loss, con2_loss
 def care():
     m= CARE(param_momentum = 0.99,total_iters=400)

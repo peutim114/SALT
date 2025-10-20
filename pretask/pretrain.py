@@ -13,7 +13,7 @@ from warmup_scheduler import GradualWarmupScheduler
 import torch.nn.functional as F
 from transform import Transform
 import argparse
-from pretask.care_module import CARE
+from pretask.SSL import CARE
 
 #from lstmattention import ViT_LSTM, MY_NET
 
@@ -156,7 +156,7 @@ def transform(x, mode):
 criterion = nn.CrossEntropyLoss().to(device)
 
 net = CARE(param_momentum = 0.99,total_iters=400).to(device)
-img = torch.randn(1, 3, 256, 256)
+
 
 
 batch_size = 128

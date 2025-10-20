@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange, repeat
-class LSTMAttention(nn.Module):
+class LSTM(nn.Module):
     def __init__(self, embed_dim, seq_len):
-        super(LSTMAttention, self).__init__()
+        super(LSTM, self).__init__()
         self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=embed_dim, num_layers=1, bidirectional=False,
                             batch_first=True)
         self.attention = nn.Linear(embed_dim, 1)
@@ -35,10 +35,10 @@ class MLP(nn.Module):
         return x
 
 
-class ViT_LSTM(nn.Module):
+class LTformer(nn.Module):
     def __init__(self, image_size, patch_size, num_classes, embed_dim, seq_len, hidden_dim, num_heads, num_layers,
                  dropout, classification):
-        super(ViT_LSTM, self).__init__()
+        super(LTformer, self).__init__()
 
         # Image and patch sizes
         self.image_size = image_size
@@ -58,9 +58,8 @@ class ViT_LSTM(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
-                LSTMAttention(embed_dim, seq_len),
+                LSTM(embed_dim, seq_len),
                 nn.LayerNorm(embed_dim),
-                nn.MultiheadAttention(embed_dim, num_heads),
                 nn.LayerNorm(embed_dim),
                 MLP(embed_dim, hidden_dim, embed_dim, dropout),
                 nn.LayerNorm(embed_dim)
@@ -71,39 +70,52 @@ class ViT_LSTM(nn.Module):
         self.classifier = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x):
-
+        # Image to patches
+       # x = x.reshape(-1, 22, 114, 9)
+       # print(x.shape)
         x = x.reshape (-1,4,32,32)
         x = self.patch_embedding(x)
         x = x.flatten(2).transpose(1, 2)
 
+        # Add position embedding
+        print(x.shape)
         b, n, _ = x.shape
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+       # print(cls_tokens.shape)
 
+        #x = torch.cat([self.position_embedding[:, :self.num_patches], x], dim=1)
         x = torch.cat([cls_tokens, x], dim=1)
-
+       # print(x.shape)
+        # Transformer encoder layers
         for [lstm_att, norm1, attention, norm2, mlp, norm3] in self.layers:
             x_lstm_att = lstm_att(x).unsqueeze(1)
             x = x + x_lstm_att
             x = norm1(x)
-
+           # x_att, _ = attention(x, x, x)
+            #x = x + x_att
             x = norm2(x)
             x_mlp = mlp(x)
             x = x + x_mlp
             x = norm3(x)
+        #print(x.shape)
+        x = x.mean(dim=1)
+
+        x = self.classifier(x)
 
         return x
 
-class MY_NET(nn.Module):
+class MY_NETC(nn.Module):
     def __init__(self, image_size, patch_size, num_classes, embed_dim, seq_len, hidden_dim, num_heads, num_layers,
                  dropout, classification):
-        super(MY_NET, self).__init__()
-        self.ViT_LSTM = ViT_LSTM(image_size, patch_size, num_classes, embed_dim, seq_len, hidden_dim, num_heads, num_layers,
+        super(MY_NETC, self).__init__()
+        self.LTformer = LTformer(image_size, patch_size, num_classes, embed_dim, seq_len, hidden_dim, num_heads, num_layers,
                  dropout, classification)
         self.classification = classification
         if self.classification == True:
-            for param in self.ViT_LSTM.parameters():
+            for param in self.LTformer.parameters():
                 param.requires_grad = False
+
         self.dropout = nn.Dropout(0.1)
         self.relu = nn.ReLU(inplace=True)
         self.fc1 = nn.Linear(256, 384)
@@ -114,7 +126,9 @@ class MY_NET(nn.Module):
         self.softmax = nn.Softmax(1)
         self.classifier = nn.Linear(embed_dim, num_classes)
 
-    def forward(self, x):
-        x =self.ViT_LSTM(x)
-        return x
 
+    def forward(self, x):
+
+        x =self.LTformer(x)
+
+        return x
